@@ -15,6 +15,7 @@ All routes (except `/health`) require an `Authorization: Bearer <uuid>` header.
 | GET | `/events` | User | List all events |
 | POST | `/event/:id/tickets` | User | Book a ticket for an event (fails if sold out or already booked by the user) |
 | GET | `/user/tickets` | User | List all tickets booked by the authenticated user |
+| DELETE | `/ticket/:id` | User | Cancel a ticket booking (restores the event's available ticket count) |
 
 ## Example requests
 
@@ -44,6 +45,10 @@ curl -X POST http://localhost:8080/event/$EVENT_ID/tickets \
 
 # List your booked tickets
 curl http://localhost:8080/user/tickets \
+  -H "Authorization: Bearer $USER_UUID"
+
+# Cancel a booked ticket (replace $TICKET_ID with the ticket's ID)
+curl -X DELETE http://localhost:8080/ticket/$TICKET_ID \
   -H "Authorization: Bearer $USER_UUID"
 
 # Get the amount of booked tickets for an event (owner only)

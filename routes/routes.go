@@ -24,6 +24,7 @@ func Register(router *httprouter.Router, database *pg.DB, owner string) {
 	router.GET("/events", withUser(getAllEventsHandler))
 	router.POST("/event/:id/tickets", withUser(bookTicketHandler))
 	router.GET("/user/tickets", withUser(getUserBookedTicketsHandler))
+	router.DELETE("/ticket/:id", withUser(cancelTicketHandler))
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

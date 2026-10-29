@@ -129,6 +129,43 @@ func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Para
 	}
 }
 
+func cancelTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+	userId := userIdFromContext(r)
+	ticketId := p.ByName("id")
+
+	ticket := &models.Ticket{Id: ticketId}
+	err := db.RunInTransaction(r.Context(), func(tx *pg.Tx) error {
+		if err := tx.Model(ticket).WherePK().Where("user_id = ?", userId).Select(); err != nil {
+			return err
+		}
+
+		if _, err := tx.Model((*models.Event)(nil)).
+			Set("available_tickets = available_tickets + 1").
+			Where("id = ?", ticket.EventId).
+			Update(); err != nil {
+			return err
+		}
+
+		_, err := tx.Model(ticket).WherePK().Delete()
+		return err
+	})
+
+	if err != nil {
+		if err == pg.ErrNoRows {
+			writeError(w, http.StatusNotFound, "Ticket with id "+ticketId+" not found")
+		} else {
+			writeError(w, http.StatusInternalServerError, "Failed to cancel ticket with id "+ticketId)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": "Ticket cancelled successfully"}); err != nil {
+		log.Println("Failed to encode response:", err)
+	}
+}
+
 func getUserBookedTicketsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	userId := userIdFromContext(r)
 
