@@ -16,7 +16,7 @@ var (
 	errAlreadyBooked      = errors.New("ticket already booked")
 )
 
-func getEventBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func getEventBookedTicketsHandler(w http.ResponseWriter, _ *http.Request, p httprouter.Params) {
 	eventId := p.ByName("id")
 
 	if err := db.Model(&models.Event{Id: eventId}).WherePK().Select(); err != nil {
@@ -38,7 +38,7 @@ func getEventBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p http
 	}
 }
 
-func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func getAmountBookedTicketsHandler(w http.ResponseWriter, _ *http.Request, p httprouter.Params) {
 	eventId := p.ByName("id")
 
 	// get event by id
@@ -111,10 +111,10 @@ func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Para
 	})
 
 	if err != nil {
-		switch err {
-		case errNoTicketsAvailable:
+		switch {
+		case errors.Is(err, errNoTicketsAvailable):
 			writeError(w, http.StatusBadRequest, "No available tickets for event with id "+eventId)
-		case errAlreadyBooked:
+		case errors.Is(err, errAlreadyBooked):
 			writeError(w, http.StatusConflict, "User already booked a ticket for event with id "+eventId)
 		default:
 			writeError(w, http.StatusInternalServerError, "Failed to book ticket for event with id "+eventId)
@@ -151,7 +151,7 @@ func cancelTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Pa
 	})
 
 	if err != nil {
-		if err == pg.ErrNoRows {
+		if errors.Is(err, pg.ErrNoRows) {
 			writeError(w, http.StatusNotFound, "Ticket with id "+ticketId+" not found")
 		} else {
 			writeError(w, http.StatusInternalServerError, "Failed to cancel ticket with id "+ticketId)
