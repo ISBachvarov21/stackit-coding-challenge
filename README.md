@@ -66,7 +66,6 @@ export OWNER_UUID=your_owner_uuid; go run main.go
 This command will start the service on port 8080. It will also set the `OWNER_UUID` environment variable, which is required for the service to function properly. Make sure to replace `your_owner_uuid` with a valid UUID.
 
 ## Assumptions made for this challenge
-- The service is stateless and does not persist data between restarts.
 - The `OWNER_UUID` is a single value, stored in an environment variable that represents the owner of the service.
 - The service does not implement user registration or authentication. It does check each passed UUID against the users table in the database to see if the user exists.
 - The service does not implement any rate limiting or throttling.
