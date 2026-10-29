@@ -34,6 +34,15 @@ func getEventBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p http
 
 	eventId := p.ByName("id")
 
+	if err := db.Model(&models.Event{Id: eventId}).WherePK().Select(); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
+		if err != nil {
+			return
+		}
+		return
+	}
+
 	// get booked tickets for event
 	tickets := []models.Ticket{}
 	err := db.Model(&tickets).Where("event_id = ?", eventId).Select()
