@@ -72,3 +72,10 @@ This command will start the service on port 8080. It will also set the `OWNER_UU
 - The service does not implement any rate limiting or throttling.
 - The service assumes what the models for events and tickets look like, as they were not provided in the challenge description. The models are defined in the `models` package.
 - The service assumes concurrent access to the same event is possible, and handles it by using database transactions to ensure that ticket booking is atomic and consistent.
+
+## Future improvements
+- Implement user authentication.
+- Implement rate limiting and throttling.
+- Implement pagination for listing events and tickets.
+- Implement more detailed error handling and logging.
+- Use a more robust HTTP server framework that supports middleware and better routing, f.e. Gin or Echo.
