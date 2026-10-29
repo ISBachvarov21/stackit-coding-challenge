@@ -156,28 +156,6 @@ func deleteEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Par
 }
 
 func getEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	userId := r.Header.Get("Authorization")
-
-	if userId == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	userId = userId[len("Bearer "):]
-
-	if err := db.Model(&models.User{Id: userId}).WherePK().Select(); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("User with id " + userId + " not found"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	eventId := p.ByName("id")
 	event := &models.Event{Id: eventId}
 
@@ -198,17 +176,6 @@ func getEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params
 }
 
 func getAllEventsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	userId := r.Header.Get("Authorization")
-
-	if userId == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	events := []models.Event{}
 	if err := db.Model(&events).Select(); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)

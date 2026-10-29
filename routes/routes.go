@@ -18,12 +18,12 @@ func Register(router *httprouter.Router, database *pg.DB, owner string) {
 	router.GET("/health", healthCheckHandler)
 	router.POST("/event", createEventHandler)
 	router.DELETE("/event/:id", deleteEventHandler)
-	router.GET("/event/:id/tickets/amount", getAmountBookedTicketsHandler)
+	router.GET("/event/:id/tickets/amount", withUser(getAmountBookedTicketsHandler))
 	router.GET("/event/:id/tickets", getEventBookedTicketsHandler)
-	router.GET("/event/:id", getEventHandler)
-	router.GET("/events", getAllEventsHandler)
-	router.POST("/event/:id/tickets", bookTicketHandler)
-	router.GET("/user/tickets", getUserBookedTicketsHandler)
+	router.GET("/event/:id", withUser(getEventHandler))
+	router.GET("/events", withUser(getAllEventsHandler))
+	router.POST("/event/:id/tickets", withUser(bookTicketHandler))
+	router.GET("/user/tickets", withUser(getUserBookedTicketsHandler))
 }
 
 func healthCheckHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {

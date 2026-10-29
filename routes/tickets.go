@@ -63,34 +63,11 @@ func getEventBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p http
 }
 
 func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	userId := r.Header.Get("Authorization")
-
-	if userId == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	userId = userId[len("Bearer "):]
-
-	err := db.Model(&models.User{Id: userId}).WherePK().Select()
-	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("User with id " + userId + " not found"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	eventId := p.ByName("id")
 
 	// get event by id
 	event := &models.Event{Id: eventId}
-	err = db.Model(event).WherePK().Select()
+	err := db.Model(event).WherePK().Select()
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
@@ -125,16 +102,7 @@ func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p htt
 }
 
 func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	userId := r.Header.Get("Authorization")
-
-	if userId == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
+	userId := userIdFromContext(r)
 
 	eventId := p.ByName("id")
 	event := &models.Event{Id: eventId}
@@ -158,7 +126,7 @@ func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Para
 
 	ticket := &models.Ticket{
 		EventId: eventId,
-		UserId:  userId[len("Bearer "):],
+		UserId:  userId,
 	}
 
 	if _, err := db.Model(ticket).Insert(); err != nil {
@@ -184,26 +152,7 @@ func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Para
 }
 
 func getUserBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	userId := r.Header.Get("Authorization")
-
-	if userId == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	userId = userId[len("Bearer "):]
-	if err := db.Model(&models.User{Id: userId}).WherePK().Select(); err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("User with id " + userId + " not found"))
-		if err != nil {
-			return
-		}
-		return
-	}
+	userId := userIdFromContext(r)
 
 	tickets := []models.Ticket{}
 	if err := db.Model(&tickets).Where("user_id = ?", userId).Select(); err != nil {
