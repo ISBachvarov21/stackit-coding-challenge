@@ -2,56 +2,32 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
 	"github.com/ISBachvarov21/stackit-coding-challenge/models"
+	"github.com/go-pg/pg/v10"
 	"github.com/julienschmidt/httprouter"
 )
 
+var (
+	errNoTicketsAvailable = errors.New("no tickets available")
+	errAlreadyBooked      = errors.New("ticket already booked")
+)
+
 func getEventBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	bearerKey := r.Header.Get("Authorization")
-
-	if bearerKey == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	key := bearerKey[len("Bearer "):]
-
-	if key != ownerUUID {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	eventId := p.ByName("id")
 
 	if err := db.Model(&models.Event{Id: eventId}).WherePK().Select(); err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusNotFound, "Event with id "+eventId+" not found")
 		return
 	}
 
 	// get booked tickets for event
 	tickets := []models.Ticket{}
-	err := db.Model(&tickets).Where("event_id = ?", eventId).Select()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to get booked tickets for event"))
-		if err != nil {
-			return
-		}
+	if err := db.Model(&tickets).Where("event_id = ?", eventId).Select(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to get booked tickets for event")
 		return
 	}
 
@@ -67,24 +43,14 @@ func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p htt
 
 	// get event by id
 	event := &models.Event{Id: eventId}
-	err := db.Model(event).WherePK().Select()
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
-		if err != nil {
-			return
-		}
+	if err := db.Model(event).WherePK().Select(); err != nil {
+		writeError(w, http.StatusNotFound, "Event with id "+eventId+" not found")
 		return
 	}
 
-	var tickets []models.Ticket
-	err = db.Model(&tickets).Where("event_id = ?", eventId).Select()
+	count, err := db.Model(&models.Ticket{}).Where("event_id = ?", eventId).Count()
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to get booked tickets for event"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusInternalServerError, "Failed to get booked tickets for event")
 		return
 	}
 
@@ -94,7 +60,7 @@ func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p htt
 	response := struct {
 		Amount int `json:"amount"`
 	}{
-		Amount: len(tickets),
+		Amount: count,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Println("Failed to encode ticket amount:", err)
@@ -103,64 +69,72 @@ func getAmountBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p htt
 
 func bookTicketHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 	userId := userIdFromContext(r)
-
 	eventId := p.ByName("id")
+
 	event := &models.Event{Id: eventId}
 	if err := db.Model(event).WherePK().Select(); err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
+		writeError(w, http.StatusNotFound, "Event with id "+eventId+" not found")
+		return
+	}
+
+	ticket := &models.Ticket{}
+	err := db.RunInTransaction(r.Context(), func(tx *pg.Tx) error {
+		// atomically claim a ticket, guarding against overselling
+		res, err := tx.Model((*models.Event)(nil)).
+			Set("available_tickets = available_tickets - 1").
+			Where("id = ?", eventId).
+			Where("available_tickets > 0").
+			Update()
 		if err != nil {
-			return
+			return err
+		}
+		if res.RowsAffected() == 0 {
+			return errNoTicketsAvailable
+		}
+
+		// prevent the same user from booking the same event twice
+		count, err := tx.Model(ticket).
+			Where("event_id = ?", eventId).
+			Where("user_id = ?", userId).
+			Count()
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return errAlreadyBooked
+		}
+
+		ticket.EventId = eventId
+		ticket.UserId = userId
+		_, err = tx.Model(ticket).Insert()
+		return err
+	})
+
+	if err != nil {
+		switch err {
+		case errNoTicketsAvailable:
+			writeError(w, http.StatusBadRequest, "No available tickets for event with id "+eventId)
+		case errAlreadyBooked:
+			writeError(w, http.StatusConflict, "User already booked a ticket for event with id "+eventId)
+		default:
+			writeError(w, http.StatusInternalServerError, "Failed to book ticket for event with id "+eventId)
 		}
 		return
 	}
 
-	if event.AvailableTickets <= 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("No available tickets for event with id " + eventId))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	ticket := &models.Ticket{
-		EventId: eventId,
-		UserId:  userId,
-	}
-
-	if _, err := db.Model(ticket).Insert(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to book ticket for event with id " + eventId))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	event.AvailableTickets--
-	if _, err := db.Model(event).WherePK().Update(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to update available tickets for event with id " + eventId))
-		if err != nil {
-			return
-		}
-		return
-	}
-
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(ticket); err != nil {
+		log.Println("Failed to encode ticket:", err)
+	}
 }
 
-func getUserBookedTicketsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func getUserBookedTicketsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	userId := userIdFromContext(r)
 
 	tickets := []models.Ticket{}
 	if err := db.Model(&tickets).Where("user_id = ?", userId).Select(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to get booked tickets for user with id " + userId))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusInternalServerError, "Failed to get booked tickets for user with id "+userId)
 		return
 	}
 

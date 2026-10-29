@@ -10,76 +10,29 @@ import (
 )
 
 func createEventHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-	bearerKey := r.Header.Get("Authorization")
-
-	if bearerKey == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	key := bearerKey[len("Bearer "):]
-
-	if key != ownerUUID {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	event := new(models.Event)
 
 	if err := json.NewDecoder(r.Body).Decode(event); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("Invalid request body"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	if event.Name == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("Event name is required"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusBadRequest, "Event name is required")
 		return
 	} else if event.Description == "" {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("Event description is required"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusBadRequest, "Event description is required")
 		return
 	} else if event.AvailableTickets <= 0 {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("Available tickets must be greater than 0"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusBadRequest, "Available tickets must be greater than 0")
 		return
 	} else if event.Date.IsZero() {
-		w.WriteHeader(http.StatusBadRequest)
-		_, err := w.Write([]byte("Event date is required"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusBadRequest, "Event date is required")
 		return
 	}
 
-	_, err := db.Model(event).Insert()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to create event"))
-		if err != nil {
-			return
-		}
+	if _, err := db.Model(event).Insert(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to create event")
 		return
 	}
 
@@ -91,67 +44,30 @@ func createEventHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Par
 }
 
 func deleteEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
-	bearerKey := r.Header.Get("Authorization")
-
-	if bearerKey == "" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	key := bearerKey[len("Bearer "):]
-
-	if key != ownerUUID {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, err := w.Write([]byte("Unauthorized"))
-		if err != nil {
-			return
-		}
-		return
-	}
-
 	eventId := p.ByName("id")
 
 	// get event by id
 	event := &models.Event{Id: eventId}
-	err := db.Model(event).WherePK().Select()
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, err := w.Write([]byte("Event not found"))
-		if err != nil {
-			return
-		}
+	if err := db.Model(event).WherePK().Select(); err != nil {
+		writeError(w, http.StatusNotFound, "Event with id "+eventId+" not found")
 		return
 	}
 
 	// delete event by id, cascade delete tickets
-	_, err = db.Model(&models.Ticket{}).Where("event_id = ?", eventId).Delete()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to delete tickets for event"))
-		if err != nil {
-			return
-		}
+	if _, err := db.Model(&models.Ticket{}).Where("event_id = ?", eventId).Delete(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to delete tickets for event")
 		return
 	}
 
-	_, err = db.Model(event).WherePK().Delete()
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to delete event"))
-		if err != nil {
-			return
-		}
+	if _, err := db.Model(event).WherePK().Delete(); err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to delete event")
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write([]byte("Event deleted successfully"))
-	if err != nil {
-		return
+	if err := json.NewEncoder(w).Encode(map[string]string{"message": "Event deleted successfully"}); err != nil {
+		log.Println("Failed to encode response:", err)
 	}
 }
 
@@ -160,11 +76,7 @@ func getEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params
 	event := &models.Event{Id: eventId}
 
 	if err := db.Model(event).WherePK().Select(); err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		_, err := w.Write([]byte("Event with id " + eventId + " not found"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusNotFound, "Event with id "+eventId+" not found")
 		return
 	}
 
@@ -175,14 +87,10 @@ func getEventHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params
 	}
 }
 
-func getAllEventsHandler(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+func getAllEventsHandler(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	events := []models.Event{}
 	if err := db.Model(&events).Select(); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		_, err := w.Write([]byte("Failed to get events"))
-		if err != nil {
-			return
-		}
+		writeError(w, http.StatusInternalServerError, "Failed to get events")
 		return
 	}
 
